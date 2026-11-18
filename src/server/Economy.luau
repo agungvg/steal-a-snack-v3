@@ -48,11 +48,15 @@ function Economy.getIncomePerSecond(player)
 	if not player then
 		return 0
 	end
+	-- The State record is the single source of truth for the multiplier:
+	-- Rebirth writes it there, and the drip loop passes State records
+	-- here, so reading it off the Player instance would miss a rebirth.
+	local record = State.getPlayer(player.UserId)
 	local total = 0
 	for _, snack in ipairs(State.getSnacks(player.UserId)) do
 		total += snack.Rate or 0
 	end
-	return total * (player.Multiplier or 1)
+	return total * (record.Multiplier or 1)
 end
 
 function Economy.start()

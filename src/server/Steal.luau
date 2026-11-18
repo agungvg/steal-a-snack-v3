@@ -9,6 +9,28 @@ local RateLimit = require(script.Parent.RateLimit)
 
 local Steal = {}
 
+-- The owner's Player object carries the base slots, so removing through
+-- it clears the slot and destroys the snack's model as well as dropping
+-- it from State. When the server cannot see that Player (they left, or
+-- the caller only has the userId), fall back to the State record:
+-- Bases.removeSnack then does a State-only removal instead.
+local function resolveOwner(ownerUserId, ownerRecord)
+	local players = game:GetService("Players")
+	local ownerPlayer = nil
+	if players and players.GetPlayerByUserId then
+		local ok, found = pcall(function()
+			return players:GetPlayerByUserId(ownerUserId)
+		end)
+		if ok then
+			ownerPlayer = found
+		end
+	end
+	if ownerPlayer and ownerPlayer.Slots then
+		return ownerPlayer
+	end
+	return ownerRecord
+end
+
 function Steal.trySteal(thiefPlayer, ownerUserId, snackId)
 	if not thiefPlayer or not ownerUserId or not snackId then
 		return false, "Invalid steal"
@@ -41,12 +63,19 @@ function Steal.trySteal(thiefPlayer, ownerUserId, snackId)
 		return false, "Your base is full"
 	end
 
+	-- The rate limit is spent only once the steal is otherwise certain to
+	-- go through: every failure above returns before this check, so a
+	-- failed attempt never burns the allowance and the retry is not
+	-- greeted with "Steal is on cooldown".
 	if not RateLimit.check(thiefPlayer.UserId, "Steal") then
 		return false, "Steal is on cooldown"
 	end
 
-	local removed = Bases.removeSnack(owner, snackId)
+	local removed = Bases.removeSnack(resolveOwner(ownerUserId, owner), snackId)
 	if not removed then
+		-- The transfer itself failed after the allowance was spent:
+		-- refund it so the next attempt is judged on its own merits.
+		RateLimit.reset(thiefPlayer.UserId, "Steal")
 		return false, "Snack not found"
 	end
 

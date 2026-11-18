@@ -42,16 +42,20 @@ function Rebirth.doRebirth(player)
 		Bases.removeSnack(player, snack.Id)
 	end
 
-	-- Reset cash to the starting amount, then raise the multiplier.
+	-- Reset cash to the starting amount, then raise the multiplier on the
+	-- State record: it is the single source of truth, and the income drip
+	-- reads it from there. Writing it on the Player instance instead
+	-- would leave income unchanged after a live rebirth.
+	local record = State.getPlayer(player.UserId)
 	local currentCash = State.getCash(player.UserId)
 	State.addCash(player.UserId, Config.StartingCash - currentCash)
-	player.Multiplier = (player.Multiplier or 1) + Config.RebirthMultiplierStep
-	player.Rebirths = (player.Rebirths or 0) + 1
+	record.Multiplier = (record.Multiplier or 1) + Config.RebirthMultiplierStep
+	record.Rebirths = (record.Rebirths or 0) + 1
 
 	return true, string.format(
 		"Rebirth complete! Income multiplier is now x%.1f (Rebirths: %d)",
-		player.Multiplier,
-		player.Rebirths
+		record.Multiplier,
+		record.Rebirths
 	)
 end
 

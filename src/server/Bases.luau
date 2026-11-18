@@ -157,8 +157,14 @@ function Bases.placeSnack(player, snackEntry)
 end
 
 function Bases.removeSnack(player, snackId)
-	if not player.Slots then
+	if not player then
 		return nil
+	end
+	-- A State record has no Slots: it is the plain data table behind a
+	-- userId, not the Player instance the base was built on. In that case
+	-- there is no slot model to destroy, so the removal is State-only.
+	if not player.Slots then
+		return State.removeSnack(player.UserId, snackId)
 	end
 	for i = 1, Config.BaseSlots do
 		local entry = player.Slots[i]
@@ -173,7 +179,10 @@ function Bases.removeSnack(player, snackId)
 			return entry
 		end
 	end
-	return nil
+	-- The snack is in State but on no slot (a stale slot, or a base
+	-- built after the snack arrived): State is the source of truth for
+	-- ownership, so remove it there rather than reporting it missing.
+	return State.removeSnack(player.UserId, snackId)
 end
 
 function Bases.buildBelt()
@@ -261,6 +270,35 @@ function Bases.buildEnvironment()
 	local env = Instance.new("Model")
 	env.Name = "Environment"
 
+	-- PointLight tally for the whole build: exactly 16, never over 20.
+	--   tower beacon .................... 1 (below)
+	--   spawn pad ........................ 1
+	--   market-stall canopies ............ 4 (one per stall)
+	--   ferris wheel hub ................. 1
+	--   ferris wheel rim ................. 4 (every third segment)
+	--   prize tower flanks ............... 2
+	--   belt gate signs .................. 2
+	--   base row centre .................. 1
+	--   TOTAL ........................... 16
+	-- Add a light here only by updating this tally the same edit.
+	local function addLight(position, color, range, brightness)
+		local bulb = Instance.new("Part")
+		bulb.Name = "LightBulb"
+		bulb.Shape = Enum.PartType.Ball
+		bulb.Size = Vector3.new(1, 1, 1)
+		bulb.Position = position
+		bulb.Color = color
+		bulb.Material = Enum.Material.Neon
+		bulb.Anchored = true
+		bulb.CanCollide = false
+		bulb.Parent = env
+		local light = Instance.new("PointLight", bulb)
+		light.Color = color
+		light.Range = range
+		light.Brightness = brightness
+		return light
+	end
+
 	-- Ground slab + SpawnLocation pad.
 	makePart("Ground", Vector3.new(220, 2, 160), Vector3.new(0, -1, -10),
 		Color3.fromRGB(110, 190, 90), Enum.Material.Grass, env)
@@ -273,6 +311,7 @@ function Bases.buildEnvironment()
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Parent = env
+	addLight(Vector3.new(0, 6, 20), Color3.fromRGB(255, 230, 150), 18, 1.5)
 
 	-- Roofs: an open pergola over the back third of every base plot,
 	-- plus a sloped canopy over each market stall.
@@ -287,10 +326,11 @@ function Bases.buildEnvironment()
 				Vector3.new(x - 6 + beam * 3, 11, -40),
 				pergolaColors[i], Enum.Material.Wood, env)
 		end
-		-- Sloped market-stall canopy.
+		-- Sloped market-stall canopy, lit from underneath.
 		local canopy = makePart("StallCanopy" .. i, Vector3.new(12, 0.6, 8),
 			Vector3.new(x, 8, -14), pergolaColors[i], Enum.Material.SmoothPlastic, env)
 		canopy.CFrame = CFrame.new(x, 8, -14) * CFrame.Angles(math.rad(-18), 0, 0)
+		addLight(Vector3.new(x, 7, -14), Color3.fromRGB(255, 220, 130), 12, 1.2)
 		local postA = makePart("StallPostA" .. i, Vector3.new(0.8, 8, 0.8),
 			Vector3.new(x - 5, 4, -11), Color3.fromRGB(120, 72, 40),
 			Enum.Material.Wood, env)
@@ -307,6 +347,7 @@ function Bases.buildEnvironment()
 	local wheel = Instance.new("Model")
 	wheel.Name = "FerrisWheel"
 	local wheelCentre = Vector3.new(-92, 15, -20)
+	addLight(wheelCentre, Color3.fromRGB(255, 220, 130), 20, 1.5)
 	local rainbow = {
 		Color3.fromRGB(255, 60, 60), Color3.fromRGB(255, 140, 40),
 		Color3.fromRGB(255, 220, 60), Color3.fromRGB(80, 220, 90),
@@ -319,6 +360,10 @@ function Bases.buildEnvironment()
 			rainbow[((i - 1) % 6) + 1], Enum.Material.Neon, wheel)
 		rim.CFrame = CFrame.new(rimPos) * CFrame.Angles(0, 0, angle + math.pi / 12)
 		rim.CanCollide = false
+		-- A light on every third rim segment: 4 around the wheel.
+		if i % 3 == 1 then
+			addLight(rimPos, rainbow[((i - 1) % 6) + 1], 10, 1)
+		end
 		local bulb = Instance.new("Part")
 		bulb.Name = "Bulb" .. i
 		bulb.Shape = Enum.PartType.Ball
@@ -360,10 +405,13 @@ function Bases.buildEnvironment()
 	wheel.Parent = env
 
 	-- 3-tier tower at (95, -25) with rainbow Neon trim, cyan beacon,
-	-- 1 PointLight and a gold flag.
+	-- 1 PointLight on the beacon plus 2 flank lights, and a gold flag.
+	-- (Beacon light 1 of the 16-light tally; the flanks are 2 more.)
 	local tower = Instance.new("Model")
 	tower.Name = "PrizeTower"
 	local towerBase = Vector3.new(95, 0, -25)
+	addLight(towerBase + Vector3.new(8, 9, 0), Color3.fromRGB(255, 220, 130), 14, 1.2)
+	addLight(towerBase + Vector3.new(-8, 15, 0), Color3.fromRGB(255, 220, 130), 14, 1.2)
 	local tierSizes = { 14, 10, 6 }
 	for i = 1, 3 do
 		local tierY = (i - 1) * 6
@@ -388,6 +436,14 @@ function Bases.buildEnvironment()
 		Color3.fromRGB(120, 120, 120), Enum.Material.Metal, tower)
 	makePart("GoldFlag", Vector3.new(4, 2.4, 0.3), towerBase + Vector3.new(2.2, 23.5, 0),
 		Color3.fromRGB(255, 200, 40), Enum.Material.Neon, tower).CanCollide = false
+
+	-- Belt-gate lights, one above each "SNACK BELT" sign, and one warm
+	-- light over the middle of the base row. Tally check: 1 beacon +
+	-- 1 spawn + 4 stalls + 1 hub + 4 rim + 2 tower flanks + 2 gates +
+	-- 1 base row = 16 PointLights in total.
+	addLight(Vector3.new(66.5, 12.5, 0), Color3.fromRGB(255, 200, 60), 16, 1.5)
+	addLight(Vector3.new(-66.5, 12.5, 0), Color3.fromRGB(255, 200, 60), 16, 1.5)
+	addLight(Vector3.new(0, 9, -30), Color3.fromRGB(255, 220, 130), 30, 1.5)
 
 	tower.Parent = env
 	env.Parent = Workspace

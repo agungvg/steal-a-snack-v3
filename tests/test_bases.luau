@@ -60,6 +60,19 @@ Test.check("buildEnvironment runs", envOk, tostring(env))
 local afterEnv = #game:GetService("Workspace"):GetDescendants()
 Test.check("buildEnvironment adds world parts", env ~= nil or afterEnv > afterBelt, "after belt " .. tostring(afterBelt) .. " after env " .. tostring(afterEnv))
 
+-- The design calls for exactly 16 PointLights across the build (beacon
+-- + spawn + stalls + wheel hub + rim + tower flanks + gates + base row),
+-- never more than 20.
+local lightCount = 0
+if env ~= nil then
+	for _, descendant in ipairs(env:GetDescendants()) do
+		if descendant.ClassName == "PointLight" then
+			lightCount += 1
+		end
+	end
+end
+Test.check("environment holds exactly 16 PointLights", lightCount == 16, "got " .. tostring(lightCount))
+
 -- Locking lives in State and Bases honours it through the same flag.
 State.setLocked(301, true)
 Test.check("base lock flag reads back", State.isLocked(301) == true)

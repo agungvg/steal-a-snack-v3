@@ -6,7 +6,8 @@ local Bases = Test.need("Bases")
 local Economy = Test.need("Economy")
 
 -- Economy and Bases work on the Player object (createBase attaches .Slots
--- to it); the State table only holds Cash/Snacks behind the UserId.
+-- to it); the State record behind the UserId holds Cash, Multiplier,
+-- Rebirths and Snacks.
 local player = Test.mockPlayer(201, "EcoTester")
 Bases.createBase(player)
 
@@ -27,10 +28,11 @@ local ok3, _msg3 = Economy.buySnack(player, Config.Snacks[2])
 Test.check("buy Noodle Ned succeeds", ok3 == true)
 Test.check("income sums both snacks", Economy.getIncomePerSecond(player) == 3, "got " .. tostring(Economy.getIncomePerSecond(player)))
 
--- The multiplier on the player scales income.
-player.Multiplier = 2
+-- The multiplier lives on the State record, not on the Player object:
+-- setting it there scales income, and a stray field on the Player is ignored.
+State.getPlayer(201).Multiplier = 2
 Test.check("multiplier doubles income", Economy.getIncomePerSecond(player) == 6, "got " .. tostring(Economy.getIncomePerSecond(player)))
-player.Multiplier = 1
+State.getPlayer(201).Multiplier = 1
 
 -- A full base rejects any further buy, end to end through buySnack.
 local full = Test.mockPlayer(202, "FullTester")

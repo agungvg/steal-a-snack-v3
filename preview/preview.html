@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Steal a Snack — Three.js preview</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #8ec9ee; }
+  #app { position: fixed; inset: 0; }
+  .title {
+    position: fixed; top: 22px; left: 28px; z-index: 2;
+    font-family: "Trebuchet MS", Verdana, sans-serif; color: #fff;
+    text-shadow: 0 3px 0 rgba(120, 40, 0, .55), 0 6px 18px rgba(0, 0, 0, .35);
+    user-select: none;
+  }
+  .title h1 { margin: 0; font-size: 54px; letter-spacing: 1px; }
+  .title h1 span { color: #ffd23c; }
+  .title p { margin: 4px 0 0 2px; font-size: 20px; font-weight: bold; color: #fff8dc; }
+  .caption {
+    position: fixed; right: 18px; bottom: 14px; z-index: 2;
+    font-family: Verdana, sans-serif; font-size: 13px; color: rgba(255, 255, 255, .85);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .6); user-select: none;
+  }
+</style>
+<script type="importmap">
+  { "imports": { "three": "./three.module.js" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div class="title"><h1>STEAL A <span>SNACK</span></h1><p>Grab snacks off the belt — guard your base!</p></div>
+<div class="caption">Three.js preview render — not a Roblox Studio capture</div>
+<script type="module">
+import * as THREE from 'three';
+
+// ---------------------------------------------------------------- setup
+const params = new URLSearchParams(location.search);
+const view = params.get('view') || 'cover';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8ec9ee);
+scene.fog = new THREE.Fog(0x8ec9ee, 160, 320);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 500);
+
+const VIEWS = {
+  cover:  { pos: [48, 28, 80],  look: [0, 3, -16],  fov: 55 },
+  play:   { pos: [20, 11, 46],  look: [-8, 3, -20], fov: 50 },
+  snacks: { pos: [0, 13, 42],   look: [0, 2, -2],   fov: 55 },
+};
+const v = VIEWS[view] || VIEWS.cover;
+camera.fov = v.fov;
+camera.updateProjectionMatrix();
+camera.position.set(v.pos[0], v.pos[1], v.pos[2]);
+camera.lookAt(v.look[0], v.look[1], v.look[2]);
+
+// ---------------------------------------------------------------- lights
+scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x6fae5a, 0.95));
+const sun = new THREE.DirectionalLight(0xfff2cf, 1.6);
+sun.position.set(60, 90, 40);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -130; sun.shadow.camera.right = 130;
+sun.shadow.camera.top = 130; sun.shadow.camera.bottom = -130;
+scene.add(sun);
+function pointLight(x, y, z, color, intensity) {
+  const l = new THREE.PointLight(color, intensity, 40, 1.6);
+  l.position.set(x, y, z);
+  scene.add(l);
+}
+pointLight(0, 7, 20, 0xffe696, 60);      // spawn pad
+pointLight(-92, 15, -20, 0xffd23c, 80);  // ferris wheel hub
+pointLight(95, 20, -25, 0x3ce6ff, 80);   // tower beacon
+
+// ---------------------------------------------------------------- helpers
+const MAT = (color, opts) => new THREE.MeshStandardMaterial(
+  Object.assign({ color, roughness: 0.65, metalness: 0.05 }, opts || {}));
+function box(w, h, d, color, x, y, z, opts) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), MAT(color, opts));
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+function ball(r, color, x, y, z, opts) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), MAT(color, opts));
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+function cyl(rt, rb, h, color, x, y, z, opts) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 24), MAT(color, opts));
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+// Two eyes + a smile on the front (+Z) of a body centred at (x, y, z).
+// `r` is the body's rough radius, used to place the face on its surface.
+function face(parent, x, y, z, r) {
+  const eyeW = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const eyeB = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+  for (const s of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(r * 0.22, 12, 10), eyeW);
+    w.position.set(x + s * r * 0.38, y + r * 0.28, z + r * 0.86);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(r * 0.11, 12, 10), eyeB);
+    p.position.set(x + s * r * 0.38, y + r * 0.28, z + r * 1.02);
+    parent.add(w); parent.add(p);
+  }
+  const smile = new THREE.Mesh(
+    new THREE.TorusGeometry(r * 0.32, r * 0.06, 8, 20, Math.PI),
+    new THREE.MeshBasicMaterial({ color: 0x1a1a1a }));
+  smile.position.set(x, y - r * 0.12, z + r * 0.9);
+  smile.rotation.set(0, 0, Math.PI);
+  parent.add(smile);
+}
+
+// ---------------------------------------------------------------- ground
+{
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(440, 320), MAT(0x6ebe5a, { roughness: 1 }));
+  g.rotation.x = -Math.PI / 2;
+  g.position.set(0, 0, -10);
+  g.receiveShadow = true;
+  scene.add(g);
+}
+
+// ---------------------------------------------------------------- belt
+{
+  box(140, 1, 10, 0x2d2d37, 0, 0.5, 0, { roughness: 0.9 });            // dark slab
+  box(140, 0.3, 3, 0xfff0c8, 0, 1.1, 0);                               // cream lane
+  // Gold Neon strips along both edges.
+  for (const z of [-4.6, 4.6]) {
+    const s = box(140, 0.3, 0.6, 0xffc828, 0, 1.1, z);
+    s.material.emissive = new THREE.Color(0x664400);
+  }
+  // Gold chevrons pointing along the belt.
+  for (let i = 0; i < 10; i++) {
+    const c = box(2.4, 0.4, 2.4, 0xffc828, -63 + i * 14, 1.3, 0);
+    c.rotation.y = Math.PI / 4;
+    c.material.emissive = new THREE.Color(0x664400);
+  }
+  // Cobble promenade panels flanking the belt.
+  for (let i = 0; i < 16; i++) {
+    const side = (i % 2 === 0) ? 1 : -1;
+    box(12, 0.4, 4, 0xa09687, -56 + Math.floor(i / 2) * 16, 0.3, side * 8, { roughness: 1 });
+  }
+  // Belt bushes.
+  for (const [x, z] of [[-60, 8], [60, 8], [-60, -8], [60, -8]]) ball(1.5, 0x3cb450, x, 1.5, z);
+  // "SNACK BELT" gates at both ends.
+  const signTexture = (() => {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffd23c'; g.fillRect(0, 0, 512, 128);
+    g.fillStyle = '#3c1e0a'; g.font = 'bold 64px Verdana'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('SNACK BELT', 256, 66);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  for (const x of [66.5, -66.5]) {
+    box(1, 10, 1, 0xc83c3c, x, 5, -4.5);
+    box(1, 10, 1, 0xc83c3c, x, 5, 4.5);
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 3, 10),
+      new THREE.MeshStandardMaterial({ map: signTexture, roughness: 0.6 }));
+    sign.position.set(x, 10.5, 0);
+    sign.castShadow = true;
+    scene.add(sign);
+  }
+}
+
+// ---------------------------------------------------------------- bases
+function buildBase(originX, roofColor) {
+  const z = -34;
+  box(24, 1, 18, 0x784828, originX, 0.5, z, { roughness: 0.9 });       // floor
+  box(24, 8, 1, 0xebdcbe, originX, 4, z - 8.5);                        // back wall
+  const widths = [26, 20, 14];
+  const roofColors = [0xc83c3c, 0xdc5a46, 0xf08250];
+  for (let i = 0; i < 3; i++) {                                         // stepped gable roof
+    box(widths[i], 1, 20, roofColors[i], originX, 9 + (i + 1) * 1.6, z - 1);
+  }
+  box(15, 0.6, 1.2, 0xffd23c, originX, 14.4, z - 1, { emissive: 0x664400 }); // neon cap
+  for (const side of [-1, 1]) {                                         // splayed wing walls
+    const w = box(1, 7, 12, 0x5aa0dc, originX + side * 12.5, 3.5, z);
+    w.rotation.y = side * Math.PI / 4;
+    const cap = box(1.2, 0.6, 12, 0xffd23c, originX + side * 12.5, 7.2, z, { emissive: 0x664400 });
+    cap.rotation.y = side * Math.PI / 4;
+  }
+  ball(1, 0x3cdc5a, originX, 6, z + 8.8, { emissive: 0x0a4416 });        // lock indicator
+  for (let slot = 0; slot < 6; slot++) {                                // slot pads
+    box(3.4, 0.4, 3.4, 0xffebaa, originX - 10 + slot * 4, 1.1, z + 2);
+  }
+}
+buildBase(-45, 0xc83c3c);
+buildBase(-15, 0x5aa0dc);
+buildBase(15, 0xf0c83c);
+buildBase(45, 0x965adc);
+
+// Spawn pad.
+box(12, 1, 12, 0xffebaa, 0, 0.5, 20);
+
+// ---------------------------------------------------------------- ferris wheel (static)
+{
+  const centre = new THREE.Vector3(-92, 15, -20);
+  const rainbow = [0xff3c3c, 0xff8c28, 0xffdc3c, 0x50dc5a, 0x3ca0ff, 0xa05aff];
+  for (let i = 0; i < 12; i++) {
+    const a = i * (Math.PI * 2 / 12);
+    const p = centre.clone().add(new THREE.Vector3(Math.cos(a) * 12, Math.sin(a) * 12, 0));
+    const rim = box(6.6, 0.8, 0.8, rainbow[i % 6], p.x, p.y, p.z, { emissive: 0x331100 });
+    rim.rotation.z = a + Math.PI / 12;
+    ball(0.6, 0xfff0b4, p.x, p.y, p.z, { emissive: 0x664400 });
+  }
+  for (let i = 0; i < 8; i++) {
+    const spoke = box(24, 0.6, 0.6, 0xe6e6e6, centre.x, centre.y, centre.z);
+    spoke.rotation.z = i * (Math.PI * 2 / 8);
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = i * (Math.PI * 2 / 8);
+    box(2.6, 2.6, 2.2, rainbow[i % 6],
+      centre.x + Math.cos(a) * 12, centre.y + Math.sin(a) * 12, centre.z + 1.2);
+  }
+  for (const side of [-1, 1]) {
+    const leg = box(1, 17, 1, 0xc83c3c, centre.x + side * 4, centre.y - 8, centre.z);
+    leg.rotation.z = side * -0.24;
+  }
+  ball(1.4, 0xffd23c, centre.x, centre.y, centre.z, { emissive: 0x664400 }); // hub
+}
+
+// ---------------------------------------------------------------- prize tower
+{
+  const base = new THREE.Vector3(95, 0, -25);
+  const sizes = [14, 10, 6];
+  const rainbow = [0xff3c3c, 0xff8c28, 0xffdc3c, 0x50dc5a, 0x3ca0ff, 0xa05aff];
+  for (let i = 0; i < 3; i++) {
+    box(sizes[i], 6, sizes[i], 0xf0e6d2, base.x, 3 + i * 6, base.z);
+    box(sizes[i] + 0.6, 0.6, sizes[i] + 0.6, rainbow[i % 6], base.x, 6 + i * 6, base.z, { emissive: 0x331100 });
+  }
+  ball(1, 0x3ce6ff, base.x, 19.5, base.z, { emissive: 0x0a5566 });       // cyan beacon
+  box(0.5, 5, 0.5, 0x787878, base.x, 22, base.z, { metalness: 0.6, roughness: 0.4 });
+  box(4, 2.4, 0.3, 0xffc828, base.x + 2.2, 23.5, base.z, { emissive: 0x664400 }); // gold flag
+}
+
+// ---------------------------------------------------------------- the 9 snacks
+const snackGroup = new THREE.Group();
+scene.add(snackGroup);
+// Each builder returns a Group holding the snack at (x, 0, z), bobbing gently.
+const snackBuilders = [
+  // Soggy Fry — golden fry carton.
+  (x, z) => {
+    const g = new THREE.Group();
+    const carton = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.4, 1.6), MAT(0xffc828));
+    carton.position.y = 1.6; carton.castShadow = true; g.add(carton);
+    for (let i = -1; i <= 1; i++) {
+      const fry = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.6, 0.35), MAT(0xffe98a));
+      fry.position.set(i * 0.6, 3.2, 0); fry.rotation.z = i * 0.12; g.add(fry);
+    }
+    face(g, 0, 1.6, 0, 1.1);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Noodle Ned — orange noodle cup with chopsticks.
+  (x, z) => {
+    const g = new THREE.Group();
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.9, 1.8, 20), MAT(0xff7a2a));
+    cup.position.y = 1.2; cup.castShadow = true; g.add(cup);
+    const noodles = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.35, 10, 20), MAT(0xffe98a));
+    noodles.position.y = 2.2; noodles.rotation.x = Math.PI / 2; g.add(noodles);
+    for (const s of [-1, 1]) {
+      const stick = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.14), MAT(0x8a5a28));
+      stick.position.set(s * 0.3, 3, 0); stick.rotation.z = s * 0.25; g.add(stick);
+    }
+    face(g, 0, 1.2, 0, 1.1);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Dancing Dumpling — pale pleated dumpling.
+  (x, z) => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1.3, 24, 18), MAT(0xfff6e0));
+    body.scale.set(1, 0.75, 0.9); body.position.y = 1.1; body.castShadow = true; g.add(body);
+    const pleat = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.22, 8, 16, Math.PI), MAT(0xf5e0b8));
+    pleat.position.y = 1.7; pleat.rotation.x = 0; g.add(pleat);
+    face(g, 0, 1.1, 0, 1.2);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Turbo Taco — yellow shell, green filling.
+  (x, z) => {
+    const g = new THREE.Group();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(1.4, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), MAT(0xffc828));
+    shell.scale.set(1, 0.8, 0.7); shell.position.y = 0.9; shell.castShadow = true; g.add(shell);
+    for (let i = -1; i <= 1; i++) {
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), MAT(0x3cb450));
+      leaf.position.set(i * 0.6, 1.9, 0); g.add(leaf);
+    }
+    face(g, 0, 1.1, 0, 1.2);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Lord Lasagna — layered pasta stack.
+  (x, z) => {
+    const g = new THREE.Group();
+    const layers = [0xffc828, 0xc83c3c, 0xffe98a, 0xc83c3c, 0xffc828];
+    layers.forEach((c, i) => {
+      const layer = new THREE.Mesh(new THREE.BoxGeometry(2.2 - i * 0.08, 0.42, 1.7), MAT(c));
+      layer.position.y = 0.5 + i * 0.44; layer.castShadow = true; g.add(layer);
+    });
+    face(g, 0, 1.4, 0, 1.1);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Queen Queso — golden cheese wedge with a crown.
+  (x, z) => {
+    const g = new THREE.Group();
+    const wedge = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 1.5, 2.0, 4), MAT(0xffc828));
+    wedge.position.y = 1.2; wedge.rotation.y = Math.PI / 4; wedge.castShadow = true; g.add(wedge);
+    for (const s of [-1, 0, 1]) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.7, 8), MAT(0xffd23c, { emissive: 0x664400 }));
+      spike.position.set(s * 0.5, 2.5, 0); g.add(spike);
+    }
+    face(g, 0, 1.2, 0, 1.2);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // King Kebab — skewer stacked with meat and peppers.
+  (x, z) => {
+    const g = new THREE.Group();
+    const skewer = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.4, 10), MAT(0xb8b8b8, { metalness: 0.7, roughness: 0.3 }));
+    skewer.position.y = 2.2; g.add(skewer);
+    const chunks = [0x8a4a28, 0x3cb450, 0x8a4a28, 0xc83c3c, 0x8a4a28];
+    chunks.forEach((c, i) => {
+      const chunk = new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 12), MAT(c));
+      chunk.position.y = 0.9 + i * 0.72; chunk.castShadow = true; g.add(chunk);
+    });
+    face(g, 0, 1.6, 0, 0.7);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Baron Burger — bun, lettuce, patty, cheese.
+  (x, z) => {
+    const g = new THREE.Group();
+    const bottom = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.1, 0.5, 20), MAT(0xe8a34c));
+    bottom.position.y = 0.55; bottom.castShadow = true; g.add(bottom);
+    const patty = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.45, 20), MAT(0x6a3a1a));
+    patty.position.y = 1.0; g.add(patty);
+    const cheese = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 2.4), MAT(0xffc828));
+    cheese.position.y = 1.3; cheese.rotation.y = Math.PI / 4; g.add(cheese);
+    const lettuce = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.22, 8, 20), MAT(0x3cb450));
+    lettuce.position.y = 1.5; lettuce.rotation.x = Math.PI / 2; g.add(lettuce);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(1.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), MAT(0xe8a34c));
+    top.position.y = 1.6; top.castShadow = true; g.add(top);
+    for (const [sx, sz] of [[-0.5, 0.4], [0.4, 0.5], [0, -0.5]]) {
+      const seed = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), MAT(0xfff6e0));
+      seed.position.set(sx, 2.8, sz); g.add(seed);
+    }
+    face(g, 0, 1.6, 0, 1.3);
+    g.position.set(x, 0, z);
+    return g;
+  },
+  // Eternal Ramen — red bowl, noodle swirl, chopsticks, steam.
+  (x, z) => {
+    const g = new THREE.Group();
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 0.9, 1.2, 20), MAT(0xc83c3c));
+    bowl.position.y = 0.9; bowl.castShadow = true; g.add(bowl);
+    const broth = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.2, 20), MAT(0xffc828));
+    broth.position.y = 1.5; g.add(broth);
+    const swirl = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.28, 10, 20), MAT(0xffe98a));
+    swirl.position.y = 1.7; swirl.rotation.x = Math.PI / 2; g.add(swirl);
+    for (const s of [-1, 1]) {
+      const stick = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 0.14), MAT(0x8a5a28));
+      stick.position.set(s * 0.35, 2.6, 0.2); stick.rotation.z = s * 0.3; g.add(stick);
+    }
+    face(g, 0, 0.9, 0, 1.3);
+    g.position.set(x, 0, z);
+    return g;
+  },
+];
+
+// The full ladder strolls the belt in price order; three more guard bases.
+const beltXs = [-40, -30, -20, -10, 0, 10, 20, 30, 40];
+const snackMeshes = [];
+snackBuilders.forEach((build, i) => {
+  const m = build(beltXs[i], 0);
+  snackGroup.add(m);
+  snackMeshes.push(m);
+});
+const baseSnacks = [
+  snackBuilders[7](-45 - 10, -32), snackBuilders[0](-15 - 6, -32),
+  snackBuilders[8](15 - 2, -32),
+];
+baseSnacks.forEach((m) => { snackGroup.add(m); snackMeshes.push(m); });
+
+// ---------------------------------------------------------------- loop
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  snackMeshes.forEach((m, i) => {
+    m.position.y = Math.sin(t * 2 + i * 0.9) * 0.25;
+    m.rotation.y = Math.sin(t * 0.6 + i) * 0.12;
+  });
+  renderer.render(scene, camera);
+}
+animate();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

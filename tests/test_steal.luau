@@ -5,6 +5,7 @@ local State = Test.need("State")
 local Bases = Test.need("Bases")
 local Economy = Test.need("Economy")
 local Steal = Test.need("Steal")
+local RateLimit = Test.need("RateLimit")
 
 local function hasSnack(userId, snackId)
 	for _, snack in ipairs(State.getSnacks(userId)) do
@@ -44,7 +45,26 @@ local okLocked, _msgLocked = Steal.trySteal(thief, 401, lockedId)
 Test.check("stealing from a locked base fails", okLocked == false)
 Test.check("locked snack stays put", hasSnack(401, lockedId) == true)
 State.setLocked(401, false)
+-- The first successful steal above legitimately spent the thief's 5s
+-- Steal allowance, so reset it here: this scenario tests lock/unlock,
+-- not the cooldown (the cooldown gets its own check below).
+RateLimit.reset(402, "Steal")
 local okUnlocked, _msgUnlocked = Steal.trySteal(thief, 401, lockedId)
 Test.check("stealing works again once unlocked", okUnlocked == true, tostring(_msgUnlocked))
+
+-- The limiter itself still bites: an immediate repeat steal is refused,
+-- because the unlocked steal just spent the allowance again.
+State.addCash(401, 10000)
+Economy.buySnack(owner, Config.Snacks[1])
+local freshId = State.getSnacks(401)[1].Id
+local okCool, msgCool = Steal.trySteal(thief, 401, freshId)
+Test.check("immediate repeat steal is on cooldown", okCool == false and msgCool == "Steal is on cooldown", tostring(msgCool))
+Test.check("cooldown steal leaves the snack put", hasSnack(401, freshId) == true)
+-- And a failed attempt never burns the allowance: resetting once lets
+-- the same steal go through.
+RateLimit.reset(402, "Steal")
+local okRetry, _msgRetry = Steal.trySteal(thief, 401, freshId)
+Test.check("steal succeeds after the allowance resets", okRetry == true, tostring(_msgRetry))
+Test.check("retried snack joins the thief", hasSnack(402, freshId) == true)
 
 Test.finish()
