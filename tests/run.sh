@@ -13,6 +13,10 @@ if [ ! -x "$LUAU" ]; then
 	echo "run.sh: Luau CLI not found at $LUAU" >&2
 	exit 2
 fi
+if ! command -v "$NODE" >/dev/null 2>&1; then
+	echo "run.sh: node not found (needed to assemble the combined test chunks)" >&2
+	exit 2
+fi
 
 passed=0
 failed=0

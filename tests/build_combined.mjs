@@ -12,7 +12,7 @@
 //
 // Usage: node tests/build_combined.mjs <repo-root> <test-file> <out-file>
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
 const repo = process.argv[2];
@@ -113,4 +113,7 @@ test = test
 	.filter((line) => !/^\s*require\("\.\/stub_env"\)\s*$/.test(line))
 	.join("\n");
 
-writeFileSync(outFile, `${stub}\n${sources}\n${loads}\n${test}\n`);
+// Write atomically: a crash mid-write must never leave a half-written
+// chunk for the Luau CLI to run.
+writeFileSync(outFile + ".tmp", `${stub}\n${sources}\n${loads}\n${test}\n`);
+renameSync(outFile + ".tmp", outFile);
