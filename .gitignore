@@ -1,0 +1,33 @@
+# Build outputs
+game.rbxl
+*.rbxlx
+out/
+build/
+dist/
+
+# Luau / Rojo
+*.luau~
+
+# Node (only used by tooling, never by the game itself)
+node_modules/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Luau CLI outputs
+coverage.out
+profile.out
+callgrind.out
+trace.json
+
+# Test scratch (combined chunks are built in /tmp, never here)
+tests/.tmp/
+
+# Logs and local scratch
+*.log
+tmp/
